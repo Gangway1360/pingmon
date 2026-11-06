@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PingMon</title>
+<link id="favicon" rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">PingMon <span id="ver" class="ver"></span></div>
+  <div class="search">
+    <input id="q" type="search" placeholder="Rechercher une cible : nom, IP, site…" aria-label="Rechercher une cible" autocomplete="off" spellcheck="false">
+    <kbd class="kbdhint" aria-hidden="true">/</kbd>
+  </div>
+  <button id="add" class="primary" type="button" title="Ajouter une ou plusieurs cibles (N)">+ Ajouter</button>
+  <div class="spacer"></div>
+  <span id="conn" class="conn" role="status">…</span>
+  <button id="menubtn" class="ghost icon" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="mainmenu" title="Menu">⋯</button>
+  <div id="mainmenu" class="popover menu" role="menu" hidden>
+    <div class="mhead">Thème</div>
+    <button role="menuitemradio" data-theme="auto">Automatique</button>
+    <button role="menuitemradio" data-theme="light">Clair</button>
+    <button role="menuitemradio" data-theme="dark">Sombre</button>
+    <div class="msep"></div>
+    <div class="mhead">Liste des cibles</div>
+    <button role="menuitemradio" data-density="compact">Compacte</button>
+    <button role="menuitemradio" data-density="comfort">Confortable</button>
+    <div class="msep"></div>
+    <button role="menuitem" id="m-settings">Paramètres et à propos…</button>
+    <button role="menuitem" id="m-help">Raccourcis clavier <kbd>?</kbd></button>
+  </div>
+</header>
+<datalist id="sites"></datalist>
+
+<div id="update" class="update" role="status" hidden><span id="update-txt"></span> <button id="update-btn" class="small" type="button">Recharger</button></div>
+<div id="offline" class="offline" role="alert">Serveur PingMon arrêté ou injoignable · reconnexion automatique…</div>
+
+<div class="layout">
+  <aside class="side" aria-label="Cibles">
+    <div class="sidetools">
+      <div class="seg small" id="filt" role="group" aria-label="Filtre">
+        <button data-f="all" class="on">Toutes <span class="cnt"></span></button>
+        <button data-f="fail">En échec <span class="cnt"></span></button>
+      </div>
+      <button id="failtop" class="ghost small" type="button" aria-pressed="false" title="Regrouper les cibles en échec en haut de la liste"><span class="lg">⇡ Échecs en haut</span><span class="sm" aria-hidden="true">⇡ En haut</span></button>
+    </div>
+    <div id="targets" class="targets"></div>
+  </aside>
+
+  <main id="main" class="main">
+    <div id="empty" class="empty" hidden>
+      <h2>Aucune cible</h2>
+      <p>Clique sur « + Ajouter » (ou touche N) pour lancer un ping continu sur une IP, un nom d'hôte ou une liste.</p>
+    </div>
+
+    <section id="panel" hidden>
+      <div class="toolbar">
+        <div class="seg" id="views" role="group" aria-label="Vue">
+          <button data-view="single" class="on">Une cible</button>
+          <button data-view="compare" title="Plusieurs cibles sur la même timeline">Comparer</button>
+        </div>
+        <div class="seg" id="presets" role="group" aria-label="Fenêtre de temps"></div>
+        <select id="presets-sel" class="presets-sel" aria-label="Fenêtre de temps"></select>
+        <button id="live" class="ghost" title="Revenir au direct (L)">▶ Direct</button>
+        <span id="span" class="spanlbl" aria-live="polite"></span>
+        <span class="spacer"></span>
+        <div class="seg" id="modes" role="group" aria-label="Outil">
+          <button data-mode="pan" class="on" title="Naviguer : glisser = déplacer, molette = zoom"><span class="lg">Naviguer</span><span class="sm" aria-hidden="true">↔</span></button>
+          <button data-mode="tag" title="Tagger : clic = tag, glisser = plage (T)"><span class="lg">Tagger</span><span class="sm" aria-hidden="true">✎</span></button>
+        </div>
+        <button id="viewbtn" class="ghost" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="viewmenu">Affichage ▾</button>
+        <div id="viewmenu" class="popover menu" hidden>
+          <label class="mchk" title="Limite l'échelle au 99e percentile pour que quelques pics ne tassent pas la courbe"><input type="checkbox" id="clip"> Ignorer les pics extrêmes</label>
+          <label class="mchk" id="tblchk"><input type="checkbox" id="tbl"> Tableau des mesures</label>
+        </div>
+        <button id="helpbtn" class="ghost icon" type="button" title="Raccourcis clavier (?)" aria-label="Raccourcis clavier">?</button>
+      </div>
+
+      <div id="single">
+        <div class="titlebar">
+          <h1 id="ctitle" title="Cliquer pour renommer (nom du switch…)"></h1>
+          <span id="cstatus" class="badge-st" role="status"></span>
+          <span id="cdetail" class="cdetail"></span>
+          <span class="spacer"></span>
+          <button id="pp" class="ghost small" title="Suspendre temporairement le ping">Pause</button>
+          <button id="stop" class="ghost small" title="Arrêter le ping : la cible passe dans « Arrêtées », son historique est conservé">Arrêter</button>
+          <button id="edit" class="ghost small">Modifier</button>
+          <span id="cmeta" class="meta"></span>
+        </div>
+        <div id="legend" class="legend"></div>
+        <div id="chartwrap" class="chartwrap">
+          <canvas id="chart" aria-label="Graphique de latence" role="img"></canvas>
+        </div>
+        <div id="kpis" class="kpis" aria-live="off"></div>
+        <details id="morestats" class="morestats"><summary>Toutes les statistiques</summary><div id="stats" class="stats"></div></details>
+        <h3 class="sect">Tags dans la fenêtre <span id="tagcount" class="muted"></span></h3>
+        <ul id="taglist" class="taglist"></ul>
+        <div id="tablewrap" class="tablewrap" hidden></div>
+      </div>
+
+      <div id="compare" hidden>
+        <p class="cmphelp muted">Clique sur les cibles à gauche pour les ajouter ou les retirer (8 au maximum). Curseur, zoom et déplacement sont communs à tous les graphs.</p>
+        <div id="cmplegend" class="legend"></div>
+        <div id="cmpempty" class="empty" hidden><h2>Aucune cible à comparer</h2><p>Clique sur des cibles dans la colonne de gauche, ou sur ⇄ à côté d'un site.</p></div>
+        <div id="cmplist" class="cmplist"></div>
+        <h3 class="sect">Récapitulatif sur la fenêtre</h3>
+        <div id="cmptable" class="tablewrap"></div>
+        <h3 class="sect">Tags dans la fenêtre <span id="cmptagcount" class="muted"></span></h3>
+        <ul id="cmptags" class="taglist"></ul>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="tip" class="tip" hidden></div>
+
+<dialog id="tagdlg">
+  <form id="tagform" method="dialog">
+    <h2 id="tagtitle">Tag</h2>
+    <label>Libellé <input id="t-label" required maxlength="80" placeholder="ex. Redémarrage du switch"></label>
+    <fieldset class="swatches" id="t-colors"><legend>Couleur</legend></fieldset>
+    <label>Portée <select id="t-scope"></select></label>
+    <label class="chk"><input type="checkbox" id="t-range"> Plage de temps</label>
+    <label>Début <input type="datetime-local" step="1" id="t-start" required></label>
+    <label id="t-endrow">Fin <input type="datetime-local" step="1" id="t-end"></label>
+    <label>Note <textarea id="t-note" rows="3" maxlength="500" placeholder="Détails, n° de ticket…"></textarea></label>
+    <div class="dlgbtns">
+      <button type="button" id="t-del" class="danger">Supprimer</button>
+      <span class="spacer"></span>
+      <button type="button" id="t-cancel" class="ghost">Annuler</button>
+      <button type="submit" class="primary">Enregistrer</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="tgtdlg">
+  <form id="tgtform" method="dialog">
+    <h2 id="g-title">Cible</h2>
+    <p id="g-ip" class="muted" style="margin:-6px 0 0"></p>
+    <label>Nom (switch…) <input id="g-label" maxlength="60" placeholder="vide = adresse affichée"></label>
+    <label>Site <input id="g-site" maxlength="40" list="sites" placeholder="vide = sans site"></label>
+    <label>Intervalle (s) <input id="g-int" type="number" min="1" max="3600" step="0.5"></label>
+    <label>Timeout (ms) <input id="g-to" type="number" min="200" max="10000" step="100"></label>
+    <label>Tag « coupure » après N pertes consécutives (0 = jamais) <input id="g-out" type="number" min="0" max="1000" step="1"></label>
+    <fieldset class="swatches" id="g-colors"><legend>Couleur de la cible</legend></fieldset>
+    <div class="dlgbtns">
+      <button type="button" id="g-del" class="danger" title="Supprime la cible, son historique et ses tags">Supprimer la cible…</button>
+      <span class="spacer"></span>
+      <button type="button" id="g-cancel" class="ghost">Annuler</button>
+      <button type="submit" class="primary">Enregistrer</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="adddlg" class="wide">
+  <h2>Ajouter des cibles</h2>
+  <div class="tabs" role="tablist">
+    <button role="tab" id="tab-one" aria-selected="true" aria-controls="addform">Une cible</button>
+    <button role="tab" id="tab-list" aria-selected="false" aria-controls="bulkform">Liste</button>
+  </div>
+  <form id="addform" method="dialog" autocomplete="off" role="tabpanel" aria-labelledby="tab-one">
+    <label>Adresse IP ou nom d'hôte <input id="a-host" required maxlength="253" spellcheck="false" placeholder="ex. 10.1.0.1 ou sw-core-01.corp.local"></label>
+    <div class="row2">
+      <label>Nom (switch…) <input id="a-label" maxlength="60" placeholder="optionnel"></label>
+      <label>Site <input id="a-site" maxlength="40" list="sites" placeholder="optionnel"></label>
+    </div>
+    <div class="row2">
+      <label>Intervalle (s) <input id="a-int" type="number" min="1" max="3600" step="0.5" value="1"></label>
+      <label>Timeout (ms) <input id="a-to" type="number" min="200" max="10000" step="100" value="2000"></label>
+    </div>
+    <label class="chk"><input type="checkbox" id="a-keep"> Garder la fenêtre ouverte pour en ajouter d'autres</label>
+    <div class="dlgbtns">
+      <span class="spacer"></span>
+      <button type="button" class="ghost" data-close>Fermer</button>
+      <button type="submit" class="primary">Surveiller</button>
+    </div>
+  </form>
+  <form id="bulkform" method="dialog" role="tabpanel" aria-labelledby="tab-list" hidden>
+    <label>Une cible par ligne : <code>adresse</code>, <code>adresse nom</code> ou <code>adresse;nom;site</code> (colonnes copiées d'Excel acceptées, <code>#</code> = commentaire)
+      <textarea id="b-text" rows="9" spellcheck="false" placeholder="10.1.0.1;SW-CORE-01;Valence&#10;10.1.0.2;SW-ACC-02;Valence&#10;srv-ad01.corp.local Contrôleur AD"></textarea>
+    </label>
+    <div class="row3">
+      <label>Site par défaut <input id="b-site" maxlength="40" list="sites" placeholder="si absent de la ligne"></label>
+      <label>Intervalle (s) <input id="b-int" type="number" min="1" max="3600" step="0.5" value="1"></label>
+      <label>Timeout (ms) <input id="b-to" type="number" min="200" max="10000" step="100" value="2000"></label>
+    </div>
+    <div id="b-preview" class="muted"></div>
+    <div id="b-result" class="bresult" hidden></div>
+    <div class="dlgbtns">
+      <span class="spacer"></span>
+      <button type="button" class="ghost" data-close>Fermer</button>
+      <button type="submit" id="b-ok" class="primary">Ajouter la liste</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="helpdlg">
+  <h2>Raccourcis</h2>
+  <table class="keys">
+    <tr><td><kbd>N</kbd></td><td>Ajouter une cible</td></tr>
+    <tr><td><kbd>/</kbd></td><td>Rechercher une cible (Échap pour effacer)</td></tr>
+    <tr><td><kbd>L</kbd></td><td>Revenir au direct (ou au moment de l'arrêt)</td></tr>
+    <tr><td><kbd>T</kbd></td><td>Basculer entre Naviguer et Tagger</td></tr>
+    <tr><td><kbd>?</kbd></td><td>Cette aide</td></tr>
+    <tr><td>Molette</td><td>Zoomer / dézoomer sur le graph</td></tr>
+    <tr><td>Glisser</td><td>Se déplacer dans le temps</td></tr>
+    <tr><td>Double-clic</td><td>Poser un tag à cet instant</td></tr>
+    <tr><td><kbd>Maj</kbd> + glisser</td><td>Poser un tag sur une plage</td></tr>
+    <tr><td>Glisser une cible</td><td>La réorganiser, ou la changer de site</td></tr>
+    <tr><td><kbd>Alt</kbd> + <kbd>↑</kbd> / <kbd>↓</kbd></td><td>Déplacer la cible sélectionnée</td></tr>
+    <tr><td>Clic droit sur une cible</td><td>Ses actions (pause, arrêt, modifier…)</td></tr>
+  </table>
+  <div class="dlgbtns"><span class="spacer"></span><button type="button" class="primary" data-close>Fermer</button></div>
+</dialog>
+
+<div id="cardmenu" class="popover menu" role="menu" hidden></div>
+
+<dialog id="setdlg" class="wide">
+  <form id="setform" method="dialog">
+    <h2>Paramètres</h2>
+    <fieldset><legend>Nouvelles cibles (valeurs proposées par défaut)</legend>
+      <div class="row3">
+        <label>Intervalle (s) <input id="s-int" type="number" min="1" max="3600" step="0.5"></label>
+        <label>Timeout (ms) <input id="s-to" type="number" min="200" max="10000" step="100"></label>
+        <label>Coupure après N pertes <input id="s-out" type="number" min="0" max="1000" step="1"></label>
+      </div>
+    </fieldset>
+    <fieldset><legend>Conservation de l'historique</legend>
+      <div class="row2">
+        <label>Mesures brutes, chaque ping (jours) <input id="s-raw" type="number" min="1" max="90" step="1"><small class="lock" data-for="raw_days"></small></label>
+        <label>Historique résumé par minute (jours) <input id="s-ret" type="number" min="7" max="3650" step="1"><small class="lock" data-for="retention_days"></small></label>
+      </div>
+      <p id="s-est" class="hint2"></p>
+    </fieldset>
+    <fieldset><legend>Charge sur les équipements</legend>
+      <label class="chk"><input type="checkbox" id="s-bo"> Ralentir le ping d'une cible injoignable <small class="lock" data-for="backoff"></small></label>
+      <div class="row2">
+        <label>…après N échecs consécutifs <input id="s-boa" type="number" min="5" max="1000" step="1"></label>
+        <label>…à un ping toutes les (s) <input id="s-bos" type="number" min="2" max="60" step="1"></label>
+      </div>
+      <p class="hint2">Toujours : au plus 1 ping par seconde et par IP, paquets de 32 octets, un seul ping en vol par cible.</p>
+    </fieldset>
+    <fieldset><legend>Sauvegardes</legend>
+      <div class="row2 ends">
+        <label>Sauvegardes quotidiennes gardées (0 = aucune) <input id="s-bk" type="number" min="0" max="60" step="1"><small class="lock" data-for="backups_keep"></small></label>
+        <button type="button" id="s-backup" class="ghost">Sauvegarder maintenant</button>
+      </div>
+      <p id="s-bkinfo" class="hint2"></p>
+    </fieldset>
+    <fieldset><legend>À propos</legend>
+      <dl id="s-about" class="about"></dl>
+    </fieldset>
+    <div class="dlgbtns">
+      <span class="spacer"></span>
+      <button type="button" class="ghost" data-close>Annuler</button>
+      <button type="submit" class="primary">Enregistrer</button>
+    </div>
+  </form>
+</dialog>
+
+<footer id="foot" class="foot"></footer>
+<div id="toast" class="toast" role="alert" hidden></div>
+<script src="app.js"></script>
+</body>
+</html>
